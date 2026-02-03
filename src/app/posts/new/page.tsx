@@ -121,6 +121,11 @@ function SubmitPostForm() {
     e.preventDefault();
     setError(null);
 
+    if (!profile?.id) {
+      setError("You must be logged in to submit a post");
+      return;
+    }
+
     if (!selectedCampaign) {
       setError("Please select a campaign");
       return;
@@ -158,22 +163,35 @@ function SubmitPostForm() {
     setSubmitting(true);
 
     try {
-      const { error: insertError } = await supabase.from("posts").insert({
+      // Note: status and submitted_at have defaults in the database
+      const postData = {
         campaign_id: selectedCampaign,
-        creator_id: profile?.id,
+        creator_id: profile.id,
         platform: detectedPlatform,
         post_url: postUrl.trim(),
         title: postTitle.trim() || null,
-        status: "pending",
-      });
+      };
 
-      if (insertError) throw insertError;
+      console.log("Submitting post:", postData);
 
+      const { data, error: insertError } = await supabase
+        .from("posts")
+        .insert(postData)
+        .select()
+        .single();
+
+      console.log("Insert result:", { data, error: insertError });
+
+      if (insertError) {
+        console.error("Insert error details:", insertError);
+        throw new Error(insertError.message || "Failed to save post to database");
+      }
+
+      setSubmitting(false);
       setSuccess(true);
     } catch (err: any) {
       console.error("Error submitting post:", err);
-      setError(err.message || "Failed to submit post");
-    } finally {
+      setError(err.message || "Failed to submit post. Please try again.");
       setSubmitting(false);
     }
   };

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import type { UserType } from "@/types/database";
 
@@ -9,21 +9,34 @@ interface AuthGuardProps {
   children: React.ReactNode;
   allowedUserTypes?: UserType[];
   requireAuth?: boolean;
+  skipOnboarding?: boolean;
 }
 
 export function AuthGuard({
   children,
   allowedUserTypes,
   requireAuth = true,
+  skipOnboarding = false,
 }: AuthGuardProps) {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, needsOnboarding } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (loading) return;
 
     if (requireAuth && !user) {
       router.push("/auth/signin");
+      return;
+    }
+
+    // Redirect brand users to onboarding if they haven't completed it
+    if (
+      !skipOnboarding &&
+      needsOnboarding &&
+      !pathname.startsWith("/onboarding")
+    ) {
+      router.push("/onboarding/brand");
       return;
     }
 
@@ -39,7 +52,7 @@ export function AuthGuard({
         router.push("/dashboard/creator");
       }
     }
-  }, [user, profile, loading, requireAuth, allowedUserTypes, router]);
+  }, [user, profile, loading, requireAuth, allowedUserTypes, router, needsOnboarding, pathname, skipOnboarding]);
 
   if (loading) {
     return (
@@ -50,6 +63,15 @@ export function AuthGuard({
   }
 
   if (requireAuth && !user) {
+    return null;
+  }
+
+  // Don't render if brand needs onboarding (unless on onboarding page)
+  if (
+    !skipOnboarding &&
+    needsOnboarding &&
+    !pathname.startsWith("/onboarding")
+  ) {
     return null;
   }
 

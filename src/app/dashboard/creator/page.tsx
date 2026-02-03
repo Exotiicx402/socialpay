@@ -48,10 +48,13 @@ export default function CreatorDashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (profile) {
+    // Reset loading state when component mounts or profile changes
+    setLoading(true);
+
+    if (profile?.id) {
       fetchDashboardData();
     }
-  }, [profile]);
+  }, [profile?.id]);
 
   const fetchDashboardData = async () => {
     try {

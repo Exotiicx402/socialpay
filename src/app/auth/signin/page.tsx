@@ -31,15 +31,20 @@ export default function SignInPage() {
     setIsLoading(true);
 
     try {
-      const { error } = await signIn(email, password);
-      if (error) {
-        setError(error.message);
+      console.log("Starting sign in...");
+      const { error: signInError } = await signIn(email, password);
+      console.log("Sign in completed:", signInError);
+
+      if (signInError) {
+        setError(signInError.message);
+        setIsLoading(false);
         return;
       }
       // Redirect will be handled by auth state change
       router.push("/dashboard/creator");
-    } catch (err) {
-      setError("An unexpected error occurred");
+    } catch (err: any) {
+      console.error("Sign in exception:", err);
+      setError(err.message || "An unexpected error occurred");
     } finally {
       setIsLoading(false);
     }

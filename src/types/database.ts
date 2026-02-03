@@ -1,5 +1,7 @@
 export type UserType = "creator" | "brand";
-export type CampaignStatus = "active" | "paused" | "completed";
+export type CampaignStatus = "active" | "paused" | "completed" | "pending_funding";
+export type PayoutModel = "base_performance" | "performance_only" | "fixed";
+export type CreatorNiche = "gaming" | "beauty" | "tech" | "food" | "fitness" | "fashion" | "travel" | "lifestyle" | "comedy" | "education" | "music" | "other";
 export type PlatformType = "tiktok" | "youtube" | "instagram";
 export type PostStatus = "pending" | "approved" | "tracking" | "completed" | "rejected";
 export type PayoutStatus = "pending" | "processing" | "completed" | "failed";
@@ -11,10 +13,24 @@ export interface User {
   user_type: UserType;
   full_name: string;
   company_name?: string | null;
+  company_id?: string | null;
   profile_image?: string | null;
   bio?: string | null;
   website?: string | null;
   social_links?: Record<string, string>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Company {
+  id: string;
+  user_id: string;
+  name: string;
+  website?: string | null;
+  logo_url?: string | null;
+  industry?: string | null;
+  company_size?: string | null;
+  description?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -45,6 +61,21 @@ export interface Campaign {
   updated_at: string;
   starts_at: string;
   expires_at?: string | null;
+  // Enhanced campaign fields
+  brief_description?: string | null;
+  key_talking_points?: string[] | null;
+  dos?: string[] | null;
+  donts?: string[] | null;
+  call_to_action?: string | null;
+  target_niche?: CreatorNiche | null;
+  min_follower_count?: number;
+  max_follower_count?: number | null;
+  payout_model?: PayoutModel;
+  payout_base_rate_cents?: number;
+  payout_performance_rate_cents?: number;
+  payout_max_per_creator_cents?: number | null;
+  total_budget_cents?: number | null;
+  campaign_images?: string[] | null;
 }
 
 export interface CampaignApplication {

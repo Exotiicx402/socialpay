@@ -20,6 +20,7 @@ import {
   PlusCircle,
   Eye,
   Clock,
+  ClipboardList,
 } from "lucide-react";
 
 interface DashboardStats {
@@ -45,10 +46,13 @@ export default function BrandDashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (profile) {
+    // Reset loading state when component mounts or profile changes
+    setLoading(true);
+
+    if (profile?.id) {
       fetchDashboardData();
     }
-  }, [profile]);
+  }, [profile?.id]);
 
   const fetchDashboardData = async () => {
     try {
@@ -85,10 +89,12 @@ export default function BrandDashboardPage() {
         }));
       }
 
-      // Fetch pending applications for brand's campaigns
+      // Fetch applications for brand's campaigns
       if (campaignsData && campaignsData.length > 0) {
         const campaignIds = campaignsData.map((c) => c.id);
-        const { data: applicationsData } = await supabase
+
+        // Fetch pending applications
+        const { data: pendingAppsData } = await supabase
           .from("campaign_applications")
           .select("*")
           .in("campaign_id", campaignIds)
@@ -96,8 +102,8 @@ export default function BrandDashboardPage() {
           .order("created_at", { ascending: false })
           .limit(5);
 
-        if (applicationsData) {
-          const applicationsWithCampaigns = applicationsData.map((app) => ({
+        if (pendingAppsData) {
+          const applicationsWithCampaigns = pendingAppsData.map((app) => ({
             ...app,
             campaign: campaignsData.find((c) => c.id === app.campaign_id),
           }));
@@ -106,6 +112,22 @@ export default function BrandDashboardPage() {
               campaign?: Campaign;
             })[]
           );
+        }
+
+        // Fetch approved applications to count unique creators
+        const { data: approvedAppsData } = await supabase
+          .from("campaign_applications")
+          .select("creator_id")
+          .in("campaign_id", campaignIds)
+          .eq("status", "approved");
+
+        if (approvedAppsData) {
+          // Count unique creators
+          const uniqueCreators = new Set(approvedAppsData.map((app) => app.creator_id));
+          setStats((prev) => ({
+            ...prev,
+            totalCreators: uniqueCreators.size,
+          }));
         }
       }
     } catch (error) {
@@ -142,7 +164,7 @@ export default function BrandDashboardPage() {
                 Manage your campaigns and connect with creators.
               </p>
             </div>
-            <Link href="/campaigns/new">
+            <Link href="/campaigns/new/wizard">
               <Button className="gap-2">
                 <PlusCircle className="h-4 w-4" />
                 New Campaign
@@ -275,7 +297,7 @@ export default function BrandDashboardPage() {
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">
                     <p>No campaigns yet.</p>
-                    <Link href="/campaigns/new">
+                    <Link href="/campaigns/new/wizard">
                       <Button variant="link" className="mt-2">
                         Create your first campaign
                       </Button>
@@ -308,26 +330,29 @@ export default function BrandDashboardPage() {
                 ) : pendingApplications.length > 0 ? (
                   <div className="space-y-3">
                     {pendingApplications.map((application) => (
-                      <div
+                      <Link
                         key={application.id}
-                        className="p-3 rounded-lg border flex items-center justify-between gap-3"
+                        href="/applications"
+                        className="block"
                       >
-                        <div>
-                          <p className="font-medium text-sm">
-                            New application for{" "}
-                            <span className="text-primary">
-                              {application.campaign?.title}
-                            </span>
-                          </p>
-                          <p className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {formatDate(application.created_at)}
-                          </p>
+                        <div className="p-3 rounded-lg border flex items-center justify-between gap-3 hover:border-primary/50 transition-colors">
+                          <div>
+                            <p className="font-medium text-sm">
+                              New application for{" "}
+                              <span className="text-primary">
+                                {application.campaign?.title}
+                              </span>
+                            </p>
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {formatDate(application.created_at)}
+                            </p>
+                          </div>
+                          <Button size="sm" variant="outline">
+                            Review
+                          </Button>
                         </div>
-                        <Button size="sm" variant="outline">
-                          Review
-                        </Button>
-                      </div>
+                      </Link>
                     ))}
                   </div>
                 ) : (
@@ -348,11 +373,17 @@ export default function BrandDashboardPage() {
               <CardTitle>Quick Actions</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <Link href="/campaigns/new">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                <Link href="/campaigns/new/wizard">
                   <Button variant="outline" className="w-full justify-start gap-2">
                     <PlusCircle className="h-4 w-4" />
                     Create Campaign
+                  </Button>
+                </Link>
+                <Link href="/applications">
+                  <Button variant="outline" className="w-full justify-start gap-2">
+                    <ClipboardList className="h-4 w-4" />
+                    Review Applications
                   </Button>
                 </Link>
                 <Link href="/creators">

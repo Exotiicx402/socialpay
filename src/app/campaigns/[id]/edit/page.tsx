@@ -16,7 +16,7 @@ import { ArrowLeft, Loader2, X, Plus, Trash2 } from "lucide-react";
 
 const PLATFORMS = ["tiktok", "youtube", "instagram"] as const;
 const CONTENT_TYPES = ["video", "short", "reel", "story", "post"] as const;
-const STATUSES = ["active", "paused", "completed"] as const;
+const STATUSES = ["active", "paused", "completed", "pending_funding"] as const;
 
 export default function EditCampaignPage() {
   const params = useParams();
@@ -32,7 +32,7 @@ export default function EditCampaignPage() {
     title: "",
     description: "",
     budget: "",
-    status: "active" as "active" | "paused" | "completed",
+    status: "active" as "active" | "paused" | "completed" | "pending_funding",
     platforms: [] as string[],
     minFollowers: "1000",
     contentTypes: [] as string[],

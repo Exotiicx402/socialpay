@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import type { Campaign, User, CampaignApplication } from "@/types/database";
+import type { Campaign, User, CampaignApplication, Post, CreatorProfile } from "@/types/database";
 import {
   ArrowLeft,
   DollarSign,
@@ -39,7 +39,12 @@ import {
   XCircle,
   AlertCircle,
   Send,
+  ExternalLink,
+  FileVideo,
+  X,
+  TrendingUp,
 } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export default function CampaignDetailPage() {
   const params = useParams();
@@ -52,6 +57,9 @@ export default function CampaignDetailPage() {
   const [application, setApplication] = useState<CampaignApplication | null>(null);
   const [applicationMessage, setApplicationMessage] = useState("");
   const [showApplyDialog, setShowApplyDialog] = useState(false);
+  const [posts, setPosts] = useState<(Post & { creator?: User; creator_profile?: CreatorProfile })[]>([]);
+  const [postsLoading, setPostsLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const isBrand = profile?.user_type === "brand";
   const isOwner = isBrand && campaign?.brand_id === profile?.id;
@@ -61,6 +69,12 @@ export default function CampaignDetailPage() {
       fetchCampaign();
     }
   }, [params.id]);
+
+  useEffect(() => {
+    if (isOwner && campaign) {
+      fetchPosts();
+    }
+  }, [isOwner, campaign]);
 
   const fetchCampaign = async () => {
     try {
@@ -104,6 +118,126 @@ export default function CampaignDetailPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchPosts = async () => {
+    if (!campaign) return;
+    setPostsLoading(true);
+
+    try {
+      const { data: postsData } = await supabase
+        .from("posts")
+        .select("*")
+        .eq("campaign_id", campaign.id)
+        .order("submitted_at", { ascending: false });
+
+      if (postsData && postsData.length > 0) {
+        const creatorIds = [...new Set(postsData.map((p) => p.creator_id))];
+
+        const { data: usersData } = await supabase
+          .from("users")
+          .select("*")
+          .in("id", creatorIds);
+
+        const { data: profilesData } = await supabase
+          .from("creator_profiles")
+          .select("*")
+          .in("user_id", creatorIds);
+
+        const postsWithCreators = postsData.map((post) => ({
+          ...post,
+          creator: usersData?.find((u) => u.id === post.creator_id),
+          creator_profile: profilesData?.find((p) => p.user_id === post.creator_id),
+        }));
+
+        setPosts(postsWithCreators as (Post & { creator?: User; creator_profile?: CreatorProfile })[]);
+      }
+    } catch (error) {
+      console.error("Error fetching posts:", error);
+    } finally {
+      setPostsLoading(false);
+    }
+  };
+
+  const handleApprovePost = async (postId: string) => {
+    setActionLoading(postId);
+    try {
+      const { error } = await supabase
+        .from("posts")
+        .update({
+          status: "approved",
+          approved_at: new Date().toISOString(),
+        })
+        .eq("id", postId);
+
+      if (error) throw error;
+
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId
+            ? { ...p, status: "approved", approved_at: new Date().toISOString() }
+            : p
+        )
+      );
+    } catch (error) {
+      console.error("Error approving post:", error);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRejectPost = async (postId: string) => {
+    const reason = prompt("Enter rejection reason (optional):");
+    setActionLoading(postId);
+    try {
+      const { error } = await supabase
+        .from("posts")
+        .update({
+          status: "rejected",
+          rejection_reason: reason || null,
+        })
+        .eq("id", postId);
+
+      if (error) throw error;
+
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId
+            ? { ...p, status: "rejected", rejection_reason: reason || null }
+            : p
+        )
+      );
+    } catch (error) {
+      console.error("Error rejecting post:", error);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const getPostStatusBadge = (status: string) => {
+    switch (status) {
+      case "pending":
+        return <Badge variant="warning">Pending</Badge>;
+      case "approved":
+        return <Badge variant="success">Approved</Badge>;
+      case "tracking":
+        return <Badge>Tracking</Badge>;
+      case "completed":
+        return <Badge variant="secondary">Completed</Badge>;
+      case "rejected":
+        return <Badge variant="destructive">Rejected</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
   };
 
   const handleApply = async () => {
@@ -581,6 +715,126 @@ export default function CampaignDetailPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Posts Section - Brand Owner Only */}
+          {isOwner && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold">Campaign Posts</h2>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span>{posts.filter(p => p.status === "pending").length} pending</span>
+                  <span>•</span>
+                  <span>{posts.filter(p => p.status === "approved").length} approved</span>
+                  <span>•</span>
+                  <span>{posts.length} total</span>
+                </div>
+              </div>
+
+              {postsLoading ? (
+                <Card>
+                  <CardContent className="py-8 text-center">
+                    <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
+                  </CardContent>
+                </Card>
+              ) : posts.length === 0 ? (
+                <Card>
+                  <CardContent className="py-8 text-center">
+                    <FileVideo className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-medium mb-2">No Posts Yet</h3>
+                    <p className="text-muted-foreground">
+                      Creators haven't submitted any posts for this campaign yet.
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-4">
+                  {posts.map((post) => (
+                    <Card key={post.id}>
+                      <CardContent className="p-4">
+                        <div className="flex items-start gap-4">
+                          {/* Creator Info */}
+                          <Avatar className="h-10 w-10">
+                            <AvatarImage
+                              src={post.creator?.profile_image || undefined}
+                              alt={post.creator?.full_name}
+                            />
+                            <AvatarFallback>
+                              {getInitials(post.creator?.full_name || "U")}
+                            </AvatarFallback>
+                          </Avatar>
+
+                          {/* Post Details */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2 mb-1">
+                              <div>
+                                <p className="font-medium">{post.creator?.full_name}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {post.title || "Untitled Post"} • {post.platform}
+                                </p>
+                              </div>
+                              {getPostStatusBadge(post.status)}
+                            </div>
+
+                            <p className="text-xs text-muted-foreground mb-2">
+                              Submitted {formatDate(post.submitted_at)}
+                              {post.approved_at && ` • Approved ${formatDate(post.approved_at)}`}
+                            </p>
+
+                            {post.rejection_reason && (
+                              <p className="text-sm text-destructive mb-2">
+                                Rejection reason: {post.rejection_reason}
+                              </p>
+                            )}
+
+                            {/* Actions */}
+                            <div className="flex items-center gap-2">
+                              <a
+                                href={post.post_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <Button variant="outline" size="sm" className="gap-1">
+                                  <ExternalLink className="h-3 w-3" />
+                                  View Post
+                                </Button>
+                              </a>
+
+                              {post.status === "pending" && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    className="bg-green-600 hover:bg-green-700"
+                                    onClick={() => handleApprovePost(post.id)}
+                                    disabled={actionLoading === post.id}
+                                  >
+                                    {actionLoading === post.id ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <CheckCircle className="h-3 w-3 mr-1" />
+                                    )}
+                                    Approve
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={() => handleRejectPost(post.id)}
+                                    disabled={actionLoading === post.id}
+                                  >
+                                    <X className="h-3 w-3 mr-1" />
+                                    Reject
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </DashboardLayout>
     </AuthGuard>

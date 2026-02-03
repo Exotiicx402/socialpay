@@ -13,6 +13,8 @@ import {
   BarChart3,
   Settings,
   PlusCircle,
+  ClipboardCheck,
+  FileCheck,
 } from "lucide-react";
 
 interface SidebarItem {
@@ -69,6 +71,16 @@ const brandLinks: SidebarItem[] = [
     label: "Create Campaign",
     href: "/campaigns/new",
     icon: PlusCircle,
+  },
+  {
+    label: "Applications",
+    href: "/applications",
+    icon: ClipboardCheck,
+  },
+  {
+    label: "Review Posts",
+    href: "/posts/review",
+    icon: FileCheck,
   },
   {
     label: "Creators",

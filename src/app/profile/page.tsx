@@ -50,15 +50,13 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (profile) {
-      setFormData({
+      setFormData((prev) => ({
+        ...prev,
         fullName: profile.full_name || "",
         companyName: profile.company_name || "",
         bio: profile.bio || "",
         website: profile.website || "",
-        tiktokUsername: "",
-        youtubeChannel: "",
-        instagramUsername: "",
-      });
+      }));
       fetchExtendedProfile();
     }
   }, [profile]);

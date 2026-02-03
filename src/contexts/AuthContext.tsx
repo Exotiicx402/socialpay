@@ -10,13 +10,15 @@ import {
 } from "react";
 import { supabase } from "@/lib/supabase";
 import type { User as SupabaseUser, Session } from "@supabase/supabase-js";
-import type { User, UserType } from "@/types/database";
+import type { User, UserType, Company } from "@/types/database";
 
 interface AuthContextType {
   user: SupabaseUser | null;
   profile: User | null;
+  company: Company | null;
   session: Session | null;
   loading: boolean;
+  needsOnboarding: boolean;
   signUp: (
     email: string,
     password: string,
@@ -37,8 +39,16 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [profile, setProfile] = useState<User | null>(null);
+  const [company, setCompany] = useState<Company | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Check if brand user needs to complete onboarding
+  const needsOnboarding = !!(
+    profile &&
+    profile.user_type === "brand" &&
+    !profile.company_id
+  );
 
   const fetchProfile = useCallback(async (userId: string) => {
     try {
@@ -60,12 +70,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const fetchCompany = useCallback(async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("companies")
+        .select("*")
+        .eq("user_id", userId)
+        .single();
+
+      if (error) {
+        // Company not found is expected for new brands
+        if (error.code !== "PGRST116") {
+          console.error("Error fetching company:", error);
+        }
+        return null;
+      }
+
+      return data as Company;
+    } catch (error) {
+      console.error("Error fetching company:", error);
+      return null;
+    }
+  }, []);
+
   const refreshProfile = useCallback(async () => {
     if (user) {
       const profileData = await fetchProfile(user.id);
       setProfile(profileData);
+
+      // Also fetch company if brand
+      if (profileData?.user_type === "brand") {
+        const companyData = await fetchCompany(user.id);
+        setCompany(companyData);
+      }
     }
-  }, [user, fetchProfile]);
+  }, [user, fetchProfile, fetchCompany]);
 
   useEffect(() => {
     // Get initial session
@@ -81,6 +120,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (currentSession?.user) {
           const profileData = await fetchProfile(currentSession.user.id);
           setProfile(profileData);
+
+          // Fetch company if brand
+          if (profileData?.user_type === "brand") {
+            const companyData = await fetchCompany(currentSession.user.id);
+            setCompany(companyData);
+          }
         }
       } catch (error) {
         console.error("Error initializing auth:", error);
@@ -101,8 +146,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (newSession?.user) {
         const profileData = await fetchProfile(newSession.user.id);
         setProfile(profileData);
+
+        // Fetch company if brand
+        if (profileData?.user_type === "brand") {
+          const companyData = await fetchCompany(newSession.user.id);
+          setCompany(companyData);
+        }
       } else {
         setProfile(null);
+        setCompany(null);
       }
 
       setLoading(false);
@@ -152,17 +204,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      console.log("Attempting sign in for:", email);
+
+      // Add timeout to prevent infinite loading
+      const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) => {
+        setTimeout(() => {
+          resolve({ data: null, error: new Error("Sign in timed out. Please check your connection and try again.") });
+        }, 15000);
+      });
+
+      const signInPromise = supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) {
-        return { error };
+      const result = await Promise.race([signInPromise, timeoutPromise]);
+
+      console.log("Sign in result:", { userId: result.data?.user?.id, error: result.error });
+
+      if (result.error) {
+        return { error: result.error };
       }
 
       return { error: null };
-    } catch (error) {
+    } catch (error: any) {
+      console.error("Sign in error:", error);
+      // Provide more helpful error message for network issues
+      if (error.message === "Load failed" || error.name === "TypeError" || error.message?.includes("fetch")) {
+        return {
+          error: new Error("Network error - please check your internet connection and try again")
+        };
+      }
       return { error: error as Error };
     }
   };
@@ -171,14 +243,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
+    setCompany(null);
     setSession(null);
   };
 
   const value = {
     user,
     profile,
+    company,
     session,
     loading,
+    needsOnboarding,
     signUp,
     signIn,
     signOut,
